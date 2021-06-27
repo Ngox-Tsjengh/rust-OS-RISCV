@@ -1,2 +1,6 @@
-os/target
+target/
+debug/
+release/
 os/Cargo.lock
+.vim
+.DS_Store
