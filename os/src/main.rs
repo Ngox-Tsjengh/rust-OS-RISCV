@@ -1,11 +1,25 @@
 #![no_std]
 #![no_main]
 #![feature(llvm_asm)]
+#![feature(global_asm)]
 mod lang_item;
 //mod console;
 mod sbi;
 
+global_asm!(include_str!("entry.asm"));
+
+fn clear_bss() {
+    extern "C" {
+        fn sbss();
+        fn ebss();
+    }
+    (sbss as usize..ebss as usize).for_each(|a| {
+        unsafe { (a as *mut u8).write_volatile(0)}
+    });
+}
+
 use crate::sbi::shutdown;
+const SBI_CONSOLE_PUTCHAR: usize = 1;
 
 const SYSCALL_EXIT: usize = 93;
 const SYSCALL_WRITE: usize = 64;
@@ -23,16 +37,20 @@ fn syscall(id: usize, args: [usize; 3]) -> isize {
     ret
 }
 
+pub fn console_putchar(c: usize) {
+    syscall(SBI_CONSOLE_PUTCHAR, [c, 0 ,0]);
+}
+
 pub fn sys_exit(xstate: i32) -> isize {
     syscall(SYSCALL_EXIT, [xstate as usize, 0, 0])
 }
 
 pub fn sys_write(fd: usize, buffer: &[u8]) -> isize {
-    syscall(SYSCALL_EXIT, [fd, buffer.as_ptr() as usize, buffer.len()])
+    syscall(SYSCALL_WRITE, [fd, buffer.as_ptr() as usize, buffer.len()])
 }
 
 #[no_mangle]
-extern "C" fn _start(){
+extern "C" fn rust_main(){
     println!("Hola Mundo!");
     shutdown();
     sys_exit(9);
@@ -43,7 +61,10 @@ struct Stdout;
 
 impl Write for Stdout {
     fn write_str(&mut self, s: &str) -> fmt::Result {
-        sys_write(1, s.as_bytes());
+ //       sys_write(1, s.as_bytes());
+        for c in s.chars() {
+            console_putchar(c as usize);
+        }
         Ok(())
     }
 }
